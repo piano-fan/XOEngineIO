@@ -1,0 +1,4 @@
+[submodule "XOEngineCore"]
+	path = XOEngineCore
+	url = https://github.com/piano-fan/XOEngineCore
+	master = master

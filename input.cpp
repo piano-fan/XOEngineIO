@@ -25,14 +25,31 @@ namespace XO{
         return {std::stoi(x), std::stoi(y)};
     }
 
-    void InputHandler::SendBestMove(){
+    void InputHandler::SendBestMove(bool want_report){
+        m_engine->BeginSession();
         auto t = Timer();
-        auto [x, y, pos_count] = m_engine->MakeBestMove(GomocupStoneID::OWN);
+        const auto& [x, y] = m_engine->GetBestMove(GomocupStoneID::OWN);
         auto time = t.Get();
-        SendMessage("Move played in " + std::to_string(time));
-        SendMessage(std::to_string(pos_count) + " positions ("
-                + std::to_string(static_cast<double>(time) / pos_count) + " per position)");
+        if(want_report){
+            auto best = m_engine->GetStatus(GomocupStoneID::OWN);
+            SendMessage("Move played in " + std::to_string(time));
+            if(best.max_depth_reached){
+                SendMessage("Max depth reached: " + std::to_string(best.max_depth_reached));
+            }
+            if(best.variation_count){
+                SendMessage(std::to_string(best.variation_count) + " variations ("
+                    + std::to_string(static_cast<double>(time) / best.variation_count) + " per variation)");
+            }
+            if(best.position_count){
+                SendMessage(std::to_string(best.position_count) + " positions cached ("
+                    + std::to_string(static_cast<double>(time) / best.position_count) + " per position)");
+            }
+            if(!best.custom_info.empty()){
+                SendMessage(best.custom_info);
+            }
+        }
         SendCommand(std::to_string(x) + ',' + std::to_string(y));
+        m_engine->Set(x, y, GomocupStoneID::OWN);
     }
 
     InputHandler::InputHandler(){}
@@ -54,7 +71,7 @@ namespace XO{
             if(command == "done"){
                 m_loading = false;
                 SendMessage("Board loaded in " + std::to_string(board_timer.Get()));
-                SendBestMove();
+                SendBestMove(true);
             }
             else if(command == "load"){
                 m_loading = false;
@@ -68,12 +85,12 @@ namespace XO{
             }
         }
         else if(command == "begin"){
-            SendBestMove();
+            SendBestMove(true);
         }
         else if(command == "turn"){
             auto [x, y] = PointFromString(words);
             m_engine->Set(x, y, GomocupStoneID::OPPONENT);
-            SendBestMove();
+            SendBestMove(true);
         }
         else if(command == "end"){
             m_running = false;
@@ -113,17 +130,17 @@ namespace XO{
         }*/
         else if(command == "single_play"){
             std::list<std::pair<unsigned int, unsigned int>> ml;
-            long total_variations = 0;
+            m_engine->BeginSession();
             auto t = Timer();
             while(1){
-                auto [x, y, pos_count] = m_engine->MakeBestMove(GomocupStoneID::OWN);
-                total_variations += pos_count;
+                const auto& [x, y] = m_engine->GetBestMove(GomocupStoneID::OWN);
+                m_engine->Set(x, y, GomocupStoneID::OWN);
                 ml.push_back({x, y});
                 if(m_engine->IsOver(x, y, GomocupStoneID::OWN)){
                     break;
                 }
-                auto [x2, y2, pos_count2] = m_engine->MakeBestMove(GomocupStoneID::OPPONENT);
-                total_variations += pos_count2;
+                const auto& [x2, y2] = m_engine->GetBestMove(GomocupStoneID::OPPONENT);
+                m_engine->Set(x2, y2, GomocupStoneID::OPPONENT);
                 ml.push_back({x2, y2});
                 if(m_engine->IsOver(x2, y2, GomocupStoneID::OPPONENT)){
                     break;
@@ -131,17 +148,21 @@ namespace XO{
             }
             auto time = t.Get();
             auto movecount = ml.size();
+            auto status = m_engine->GetStatus(GomocupStoneID::OWN);
             std::string movestring;
             for(auto &move: ml){
                 movestring += " " + std::to_string(move.first) + " " + std::to_string(move.second);
             }
-            std::string outputmessage = std::to_string(movecount) + " moves played in "+ std::to_string(time)
-                + " (" + std::to_string(static_cast<double>(time) / movecount) + " per move)";
-            std::string outputmessage2 = std::to_string(total_variations) + " positions"
-                + " (" + std::to_string(static_cast<double>(time) / total_variations) + " per position)";
             SendCommand(std::string("play") + movestring);
-            SendMessage(outputmessage);
-            SendMessage(outputmessage2);
+            SendMessage(std::to_string(movecount) + " moves played in "+ std::to_string(time)
+                        + " (" + std::to_string(static_cast<double>(time) / movecount) + " per move)");
+            if(status.max_depth_reached){
+                SendMessage("Max depth reached: " + std::to_string(status.max_depth_reached));
+            }
+            if(status.variation_count){
+                SendMessage(std::to_string(status.variation_count) + " variations"
+                        + " (" + std::to_string(static_cast<double>(time) / status.variation_count) + " per variation)");
+            }
         }
         else if(command == "squareinfo"){
             int x, y;

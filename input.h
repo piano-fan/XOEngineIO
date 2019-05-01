@@ -11,7 +11,7 @@ namespace XO{
         bool m_loading = false;
         bool m_running = true;
 
-        void SendBestMove();
+        void SendBestMove(bool want_report);
     public:
         InputHandler();
         void AttachCore(ICore &e);
